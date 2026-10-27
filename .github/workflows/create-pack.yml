@@ -1,0 +1,34 @@
+name: Create emoji pack
+on:
+  workflow_dispatch:
+    inputs:
+      pack_dir:
+        description: 'Папка с .tgs внутри packs/, например packs/demo'
+        required: true
+      user_id:
+        description: 'Telegram user id владельца пака (от @userinfobot)'
+        required: true
+      title:
+        description: 'Название пака'
+        required: true
+      slug:
+        description: 'Короткое имя (латиница)'
+        required: true
+permissions:
+  contents: read
+jobs:
+  create:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Create pack
+        env:
+          TG_BOT_TOKEN: ${{ secrets.TG_BOT_TOKEN }}
+          PACK_DIR: ${{ inputs.pack_dir }}
+          USER_ID: ${{ inputs.user_id }}
+          TITLE: ${{ inputs.title }}
+          SLUG: ${{ inputs.slug }}
+        run: node scripts/create-pack.js "$PACK_DIR" "$USER_ID" "$TITLE" "$SLUG"
