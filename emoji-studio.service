@@ -1,0 +1,14 @@
+[Unit]
+Description=Emoji Studio (Lottie editor + Telegram pack bot API)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+WorkingDirectory=/opt/emoji-studio
+ExecStart=/usr/bin/node /opt/emoji-studio/server.js
+Environment=PORT=3000
+Restart=always
+User=www-data
+
+[Install]
+WantedBy=multi-user.target

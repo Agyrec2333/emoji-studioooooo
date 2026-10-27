@@ -1,0 +1,363 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Lottie-редактор эмодзи</title>
+<style>
+  :root { --bg:#000; --panel:#141416; --panel2:#1c1c1f; --fg:#f2f2f4; --muted:#8a8a93; --line:#26262b; --accent:#4f8cff; --danger:#ef4444; --ok:#22c55e; }
+  @media (prefers-color-scheme: light) {
+    :root { --bg:#eef0f3; --panel:#fff; --panel2:#f5f6f8; --fg:#111; --muted:#6b6b75; --line:#dfe1e6; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:13px/1.4 system-ui, -apple-system, sans-serif; }
+  button, input, select { font:inherit; color:var(--fg); background:var(--panel2); border:1px solid var(--line); border-radius:10px; padding:7px 10px; }
+  button { cursor:pointer; }
+  button:hover:not(:disabled) { border-color:var(--accent); }
+  button:disabled { opacity:.4; cursor:default; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  input[type=text], input[type=password], input[type=number] { width:100%; }
+  input[type=color] { width:100%; height:34px; padding:2px; }
+
+  header { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:10px 14px; background:var(--panel); border-bottom:1px solid var(--line); position:sticky; top:0; z-index:2; }
+  header .brand { font-weight:700; margin-right:8px; }
+  .status { margin-left:auto; color:var(--muted); }
+
+  main { display:grid; grid-template-columns:1fr 300px; gap:14px; padding:14px; max-width:1200px; margin:0 auto; }
+  @media (max-width:900px) { main { grid-template-columns:1fr; } }
+  .panel { background:var(--panel); border:1px solid var(--line); border-radius:16px; padding:14px; display:flex; flex-direction:column; gap:10px; }
+  .panel h3 { font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--muted); margin:4px 0 0; }
+  .hint { color:var(--muted); font-size:12px; }
+  label { display:flex; flex-direction:column; gap:4px; color:var(--muted); font-size:12px; }
+  label > * { color:var(--fg); }
+
+  .stage { display:flex; flex-direction:column; gap:12px; align-items:center; }
+  #anim { width:min(90vw,512px); aspect-ratio:1; border-radius:18px; border:1px solid var(--line);
+    background: repeating-conic-gradient(#8881 0 25%, transparent 0 50%) 0 0 / 24px 24px, var(--panel); }
+  .row { display:flex; gap:8px; flex-wrap:wrap; align-items:center; }
+  .templates button { flex:1; }
+  .meter { font-variant-numeric:tabular-nums; }
+  .meter.bad { color:var(--danger); font-weight:600; }
+  .meter.good { color:var(--ok); }
+  .queue { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:6px; max-height:200px; overflow:auto; }
+  .queue li { display:flex; justify-content:space-between; align-items:center; padding:6px 8px; border:1px solid var(--line); border-radius:10px; background:var(--panel2); }
+  .queue li button { padding:0 6px; border:none; background:none; color:var(--muted); }
+  .queue li button:hover { color:var(--danger); }
+  .err { color:var(--danger); font-size:12px; white-space:pre-wrap; }
+  .link a { color:var(--accent); }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="brand">Lottie-редактор эмодзи</div>
+  <button id="bOpen">Открыть .tgs / .json</button>
+  <input id="file" type="file" accept=".tgs,.json,application/json,application/x-tgsticker" hidden>
+  <button id="bExport">Скачать .tgs</button>
+  <span class="status" id="status">Выберите шаблон или откройте файл</span>
+</header>
+
+<main>
+  <section class="stage">
+    <div id="anim"></div>
+    <div class="row meter" id="meter"></div>
+    <div class="err" id="warn"></div>
+  </section>
+
+  <aside style="display:flex;flex-direction:column;gap:14px">
+    <div class="panel templates">
+      <h3>Стартовая база</h3>
+      <div class="row">
+        <button data-tpl="pulse">Пульс</button>
+        <button data-tpl="bounce">Прыжок</button>
+        <button data-tpl="spin">Вращение</button>
+      </div>
+      <p class="hint">Шаблоны собраны в этом редакторе. Их можно менять и отправлять в пак.</p>
+    </div>
+
+    <div class="panel" id="editPanel">
+      <h3>Текст</h3>
+      <input id="textEdit" type="text" disabled placeholder="Откройте анимацию с текстом">
+      <h3>Цвета</h3>
+      <div id="colors" class="hint">Нет заливок</div>
+    </div>
+
+    <div class="panel">
+      <h3>Пак в Telegram</h3>
+      <label>Токен бота
+        <input id="token" type="password" placeholder="123456:ABC…" autocomplete="off">
+      </label>
+      <label>Ваш user id (от @userinfobot)
+        <input id="userId" type="number" placeholder="например 123456789">
+      </label>
+      <label>Название пака
+        <input id="title" type="text" value="Мои эмодзи">
+      </label>
+      <label>Короткое имя (латиница)
+        <input id="slug" type="text" value="my_emoji">
+      </label>
+      <label>Эмодзи для этой анимации
+        <input id="emoji" type="text" value="🙂" maxlength="4">
+      </label>
+      <div class="row">
+        <button id="bQueue">Добавить в очередь</button>
+      </div>
+      <ul class="queue" id="queue"></ul>
+      <button id="bSend" class="primary" disabled>Создать пак в Telegram</button>
+      <div class="hint">Токен отправляется на ваш сервер только для этого запроса и не сохраняется.</div>
+      <div class="err" id="sendErr"></div>
+      <div class="link" id="sendOk"></div>
+    </div>
+  </aside>
+</main>
+
+<script src="lottie.min.js"></script>
+<script>
+(() => {
+  const $ = id => document.getElementById(id);
+  const LIMIT = 64 * 1024;
+  let data = null;          // Lottie JSON, который редактируем
+  let anim = null;
+  const queue = [];         // {name, emoji, tgs: base64}
+
+  // ---------- шаблоны ----------
+  const kf = (t, s) => ({ t, s, i: { x: [0.5], y: [0.5] }, o: { x: [0.5], y: [0.5] } });
+  const base = (name, layers, fonts) => ({
+    v: '5.7.4', fr: 30, ip: 0, op: 60, w: 512, h: 512, nm: name, ddd: 0, assets: [],
+    fonts: { list: fonts || [] }, layers,
+  });
+  const ellipseLayer = (color, scaleKeys, posKeys) => ({
+    ddd: 0, ind: 1, ty: 4, nm: 'круг', sr: 1, st: 0, ip: 0, op: 60,
+    ks: {
+      o: { a: 0, k: 100 }, r: { a: 0, k: 0 },
+      p: posKeys ? { a: 1, k: posKeys } : { a: 0, k: [256, 256, 0] },
+      a: { a: 0, k: [0, 0, 0] },
+      s: scaleKeys ? { a: 1, k: scaleKeys } : { a: 0, k: [100, 100, 100] },
+    },
+    shapes: [{ ty: 'gr', nm: 'группа', it: [
+      { ty: 'el', nm: 'эллипс', p: { a: 0, k: [0, 0] }, s: { a: 0, k: [300, 300] } },
+      { ty: 'fl', nm: 'заливка', c: { a: 0, k: color }, o: { a: 0, k: 100 }, r: 1 },
+      { ty: 'tr', p: { a: 0, k: [0, 0] }, a: { a: 0, k: [0, 0] }, s: { a: 0, k: [100, 100] }, r: { a: 0, k: 0 }, o: { a: 0, k: 100 }, sk: { a: 0, k: 0 }, sa: { a: 0, k: 0 } },
+    ] }],
+  });
+  const textLayer = (text, color, posKeys) => ({
+    ddd: 0, ind: 1, ty: 5, nm: 'текст', sr: 1, st: 0, ip: 0, op: 60,
+    ks: {
+      o: { a: 0, k: 100 }, r: { a: 0, k: 0 },
+      p: posKeys ? { a: 1, k: posKeys } : { a: 0, k: [256, 256, 0] },
+      a: { a: 0, k: [0, 0, 0] }, s: { a: 0, k: [100, 100, 100] },
+    },
+    t: { d: { k: [{ t: 0, s: { s: 120, f: 'Arial-BoldMT', t: text, j: 2, tr: 0, lh: 140, ls: 0, fc: color, sc: [0, 0, 0], sw: 16, of: true } }] },
+         p: {}, m: { g: 1, a: { a: 0, k: [0, 0] } }, a: [] },
+  });
+  const fontsList = [{ fName: 'Arial-BoldMT', fFamily: 'Arial', fStyle: 'Bold', ascent: 72 }];
+
+  const TEMPLATES = {
+    pulse: () => base('пульс', [ellipseLayer([1, 0.42, 0.2, 1], [
+      kf(0, [80, 80, 100]), kf(30, [110, 110, 100]), kf(60, [80, 80, 100])])]),
+    bounce: () => base('прыжок', [textLayer('ok', [1, 1, 1], [
+      kf(0, [256, 300, 0]), kf(15, [256, 190, 0]), kf(30, [256, 300, 0]), kf(45, [256, 190, 0]), kf(60, [256, 300, 0])])], fontsList),
+    spin: () => {
+      const l = ellipseLayer([0.3, 0.6, 1, 1], null);
+      l.ks.r = { a: 1, k: [kf(0, [0]), kf(60, [360])] };
+      l.shapes[0].it[0].s = { a: 0, k: [220, 80] };
+      return base('вращение', [l]);
+    },
+  };
+
+  // ---------- загрузка и сохранение ----------
+  async function gunzipText(blob) {
+    return new Response(blob.stream().pipeThrough(new DecompressionStream('gzip'))).text();
+  }
+  async function gzipBytes(text) {
+    const stream = new Blob([text]).stream().pipeThrough(new CompressionStream('gzip'));
+    return new Uint8Array(await new Response(stream).arrayBuffer());
+  }
+  const toBase64 = bytes => {
+    let s = '';
+    for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
+    return btoa(s);
+  };
+
+  function load(json, label) {
+    data = json;
+    $('status').textContent = label;
+    rebuild();
+  }
+
+  function rebuild() {
+    if (anim) anim.destroy();
+    $('anim').innerHTML = '';
+    anim = lottie.loadAnimation({ container: $('anim'), renderer: 'svg', loop: true, autoplay: true, animationData: JSON.parse(JSON.stringify(data)) });
+    buildEditor();
+    updateMeter();
+  }
+
+  // ---------- редактирование текста и цветов ----------
+  function textKeys() {
+    const out = [];
+    (data.layers || []).forEach(l => {
+      if (l.ty === 5 && l.t && l.t.d && l.t.d.k) l.t.d.k.forEach(k => out.push(k));
+    });
+    return out;
+  }
+  function fills() {
+    const out = [];
+    const walk = items => (items || []).forEach(it => {
+      if (it.ty === 'fl' && it.c) out.push(it.c);
+      if (it.it) walk(it.it);
+      if (it.shapes) walk(it.shapes);
+    });
+    (data.layers || []).forEach(l => walk(l.shapes));
+    return out;
+  }
+  const hexToRgb = hex => [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16) / 255);
+  const rgbToHex = c => '#' + c.slice(0, 3).map(v => Math.round(v * 255).toString(16).padStart(2, '0')).join('');
+
+  function buildEditor() {
+    const tk = textKeys();
+    $('textEdit').disabled = !tk.length;
+    $('textEdit').value = tk.length ? tk[0].s.t : '';
+    $('textEdit').oninput = () => { tk.forEach(k => k.s.t = $('textEdit').value); reanimate(); };
+
+    const box = $('colors');
+    box.innerHTML = '';
+    const fs = fills();
+    if (!fs.length) { box.textContent = 'Нет заливок'; return; }
+    fs.forEach((c, idx) => {
+      const row = document.createElement('label');
+      row.textContent = `Заливка ${idx + 1}`;
+      const inp = document.createElement('input');
+      inp.type = 'color';
+      inp.value = rgbToHex(c.a === 0 ? c.k : c.k[0].s);
+      inp.oninput = () => {
+        const rgb = [...hexToRgb(inp.value), 1];
+        if (c.a === 0) c.k = rgb;
+        else c.k.forEach(k => { if (k.s) k.s = rgb; });
+        reanimate();
+      };
+      row.append(inp);
+      box.append(row);
+    });
+  }
+
+  function reanimate() {
+    if (anim) anim.destroy();
+    $('anim').innerHTML = '';
+    anim = lottie.loadAnimation({ container: $('anim'), renderer: 'svg', loop: true, autoplay: true, animationData: JSON.parse(JSON.stringify(data)) });
+    updateMeter();
+  }
+
+  // ---------- проверка и экспорт ----------
+  async function tgsOf() {
+    const text = JSON.stringify(data);
+    return gzipBytes(text);
+  }
+  function checkProblems() {
+    const issues = [];
+    if (data.w !== 512 || data.h !== 512) issues.push(`холст ${data.w}×${data.h}, нужен 512×512`);
+    if (data.fr > 60) issues.push(`${data.fr} fps, максимум 60`);
+    const sec = (data.op - data.ip) / data.fr;
+    if (!(sec > 0 && sec <= 3)) issues.push(`длительность ${sec.toFixed(2)} с, максимум 3`);
+    return issues;
+  }
+  async function updateMeter() {
+    if (!data) return;
+    const bytes = await tgsOf();
+    const kb = (bytes.length / 1024).toFixed(1);
+    const m = $('meter');
+    m.textContent = `${kb} КБ из 64 КБ`;
+    m.className = 'row meter ' + (bytes.length > LIMIT ? 'bad' : 'good');
+    const problems = checkProblems();
+    $('warn').textContent = problems.join('\n');
+  }
+
+  $('bExport').onclick = async () => {
+    if (!data) return;
+    const bytes = await tgsOf();
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([bytes], { type: 'application/x-tgsticker' }));
+    a.download = 'emoji.tgs';
+    a.click();
+  };
+
+  // ---------- очередь и отправка ----------
+  function renderQueue() {
+    const ul = $('queue');
+    ul.innerHTML = '';
+    queue.forEach((q, i) => {
+      const li = document.createElement('li');
+      li.textContent = `${q.emoji}  ${q.name}`;
+      const del = document.createElement('button');
+      del.textContent = '×';
+      del.onclick = () => { queue.splice(i, 1); renderQueue(); };
+      li.append(del);
+      ul.append(li);
+    });
+    $('bSend').disabled = !queue.length;
+  }
+
+  $('bQueue').onclick = async () => {
+    if (!data) { $('sendErr').textContent = 'Сначала откройте или выберите анимацию'; return; }
+    const problems = checkProblems();
+    const bytes = await tgsOf();
+    if (bytes.length > LIMIT) { $('sendErr').textContent = `Файл ${(bytes.length / 1024).toFixed(1)} КБ, нужно не больше 64 КБ`; return; }
+    if (problems.length) { $('sendErr').textContent = problems.join('\n'); return; }
+    $('sendErr').textContent = '';
+    queue.push({ name: data.nm || 'эмодзи', emoji: $('emoji').value || '🙂', tgs: toBase64(bytes) });
+    renderQueue();
+  };
+
+  $('bSend').onclick = async () => {
+    $('sendErr').textContent = '';
+    $('sendOk').textContent = '';
+    $('bSend').disabled = true;
+    $('bSend').textContent = 'Отправка…';
+    try {
+      const res = await fetch('/api/pack', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          token: $('token').value.trim(),
+          userId: $('userId').value.trim(),
+          title: $('title').value.trim(),
+          slug: $('slug').value.trim(),
+          stickers: queue,
+        }),
+      });
+      const j = await res.json();
+      if (!j.ok) throw new Error(j.error);
+      $('sendOk').innerHTML = `Пак создан: <a href="${j.link}" target="_blank" rel="noopener">${j.link}</a> (${j.count} эмодзи)`;
+      queue.length = 0;
+      renderQueue();
+    } catch (e) {
+      $('sendErr').textContent = e.message;
+    } finally {
+      $('bSend').textContent = 'Создать пак в Telegram';
+      $('bSend').disabled = !queue.length;
+    }
+  };
+
+  // ---------- кнопки загрузки ----------
+  document.querySelectorAll('[data-tpl]').forEach(b => {
+    b.onclick = () => load(TEMPLATES[b.dataset.tpl](), `Шаблон: ${b.textContent}`);
+  });
+  $('bOpen').onclick = () => $('file').click();
+  $('file').addEventListener('change', async e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    try {
+      const text = f.name.endsWith('.tgs') ? await gunzipText(f) : await f.text();
+      load(JSON.parse(text), f.name);
+    } catch (err) {
+      $('status').textContent = 'Не удалось открыть: ' + err.message;
+    }
+    e.target.value = '';
+  });
+
+  load(TEMPLATES.pulse(), 'Шаблон: Пульс');
+  renderQueue();
+})();
+</script>
+</body>
+</html>
